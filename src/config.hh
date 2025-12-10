@@ -37,7 +37,7 @@ struct Config {
     //
     // If empty, retainInMemory will be set to 1 and cache will be stored in
     // memory.
-    std::string directory = ".ccls-cache";
+    std::string directory = ".cache/ccls";
 
     // Cache serialization format.
     //
