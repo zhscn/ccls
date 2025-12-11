@@ -4,7 +4,6 @@
 #include "sema_manager.hh"
 
 #include "clang_tu.hh"
-#include "filesystem.hh"
 #include "log.hh"
 #include "pipeline.hh"
 #include "platform.hh"
@@ -130,8 +129,8 @@ class StoreInclude : public PPCallbacks {
 
 public:
   StoreInclude(const SourceManager &sm, IncludeStructure &out) : sm(sm), out(out) {}
-  void InclusionDirective(SourceLocation hashLoc, const Token &includeTok, StringRef fileName, bool isAngled,
-                          CharSourceRange filenameRange,
+  void InclusionDirective(SourceLocation /*hashLoc*/, const Token & /*includeTok*/, StringRef /*fileName*/,
+                          bool /*isAngled*/, CharSourceRange /*filenameRange*/,
 #if LLVM_VERSION_MAJOR >= 16 // llvmorg-16-init-15080-g854c10f8d185
                           OptionalFileEntryRef fileRef,
 #elif LLVM_VERSION_MAJOR >= 15 // llvmorg-15-init-7692-gd79ad2f1dbc2
@@ -139,11 +138,12 @@ public:
 #else
                           const FileEntry *file,
 #endif
-                          StringRef searchPath, StringRef relativePath, const clang::Module *suggestedModule,
+                          StringRef /*searchPath*/, StringRef /*relativePath*/,
+                          const clang::Module * /*suggestedModule*/,
 #if LLVM_VERSION_MAJOR >= 19 // llvmorg-19-init-1720-gda95d926f6fc
-                          bool moduleImported,
+                          bool /*moduleImported*/,
 #endif
-                          SrcMgr::CharacteristicKind fileKind) override {
+                          SrcMgr::CharacteristicKind /*fileKind*/) override {
     (void)sm;
 #if LLVM_VERSION_MAJOR >= 15 // llvmorg-15-init-7692-gd79ad2f1dbc2
     const FileEntry *file = fileRef ? &fileRef->getFileEntry() : nullptr;
@@ -221,7 +221,7 @@ public:
       d.category = DiagnosticIDs::getCategoryNumberForDiag(info.getID());
     };
 
-    auto addFix = [&](bool syntheticMessage) -> bool {
+    auto addFix = [&](bool /*syntheticMessage*/) -> bool {
       if (!concerned)
         return false;
       for (const FixItHint &fixIt : info.getFixItHints()) {
@@ -716,10 +716,10 @@ void SemaManager::scheduleDiag(const std::string &path, int debounce) {
 void SemaManager::onView(const std::string &path) {
   std::lock_guard lock(mutex);
   if (!sessions.get(path))
-    preamble_tasks.pushBack(PreambleTask{path}, true);
+    preamble_tasks.pushBack(PreambleTask{path, nullptr, false}, true);
 }
 
-void SemaManager::onSave(const std::string &path) { preamble_tasks.pushBack(PreambleTask{path}, true); }
+void SemaManager::onSave(const std::string &path) { preamble_tasks.pushBack(PreambleTask{path, nullptr, false}, true); }
 
 void SemaManager::onClose(const std::string &path) {
   std::lock_guard lock(mutex);

@@ -4,9 +4,9 @@
 #pragma once
 
 #include "lsp.hh"
-#include "query.hh"
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>

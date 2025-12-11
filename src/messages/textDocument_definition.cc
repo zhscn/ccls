@@ -4,7 +4,6 @@
 #include "message_handler.hh"
 #include "query.hh"
 
-#include <ctype.h>
 #include <limits.h>
 #include <stdlib.h>
 
@@ -73,7 +72,7 @@ void MessageHandler::textDocument_definition(TextDocumentPositionParam &param, R
     // Check #include
     for (const IndexInclude &include : file->def->includes) {
       if (include.line == ls_pos.line) {
-        result.push_back({DocumentUri::fromPath(include.resolved_path).raw_uri});
+        result.push_back({DocumentUri::fromPath(include.resolved_path).raw_uri, {}, {}});
         range = {{0, 0}, {0, 0}};
         break;
       }

@@ -3,8 +3,9 @@
 
 #include "utils.hh"
 
+#include "config.hh"
 #include "log.hh"
-#include "message_handler.hh"
+#include "message_handler.hh" // IWYU pragma: keep
 #include "pipeline.hh"
 #include "platform.hh"
 
@@ -18,10 +19,8 @@
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
-#include <functional>
 #include <regex>
 #include <string.h>
-#include <unordered_map>
 
 using namespace llvm;
 

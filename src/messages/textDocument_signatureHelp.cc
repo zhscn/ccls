@@ -67,7 +67,7 @@ public:
       : CodeCompleteConsumer(opts), alloc(std::make_shared<GlobalCodeCompletionAllocator>()), cCTUInfo(alloc),
         from_cache(from_cache) {}
   void ProcessOverloadCandidates(Sema &s, unsigned currentArg, OverloadCandidate *candidates, unsigned numCandidates,
-                                 SourceLocation openParLoc
+                                 SourceLocation /*openParLoc*/
 #if LLVM_VERSION_MAJOR >= 14
                                  ,
                                  bool braced

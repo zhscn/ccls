@@ -15,7 +15,6 @@
 
 #include <algorithm>
 #include <ctype.h>
-#include <functional>
 #include <limits.h>
 using namespace llvm;
 

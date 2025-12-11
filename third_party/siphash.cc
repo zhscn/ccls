@@ -19,6 +19,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#endif
+
 /* default: SipHash-2-4 */
 #define cROUNDS 2
 #define dROUNDS 4

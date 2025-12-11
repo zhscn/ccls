@@ -189,7 +189,7 @@ std::mutex &getFileMutex(const std::string &path) {
   return mutexes[std::hash<std::string>()(path) % n_MUTEXES];
 }
 
-bool indexer_Parse(SemaManager *completion, WorkingFiles *wfiles, Project *project, VFS *vfs,
+bool indexer_Parse(SemaManager * /*completion*/, WorkingFiles *wfiles, Project *project, VFS *vfs,
                    const GroupMatch &matcher) {
   std::optional<IndexRequest> opt_request = index_request->tryPopFront();
   if (!opt_request)
@@ -581,7 +581,7 @@ void launchStdin() {
       // g_config is not available before "initialize". Use 0 in that case.
       on_request->pushBack(
           {id, std::move(method), std::move(message), std::move(document),
-           chrono::steady_clock::now() + chrono::milliseconds(g_config ? g_config->request.timeout : 0)});
+           chrono::steady_clock::now() + chrono::milliseconds(g_config ? g_config->request.timeout : 0), ""});
 
       if (received_exit)
         break;
@@ -595,7 +595,7 @@ void launchStdin() {
       auto document = std::make_unique<rapidjson::Document>();
       document->Parse(message.get(), str.size());
       on_request->pushBack(
-          {RequestId(), std::string("exit"), std::move(message), std::move(document), chrono::steady_clock::now()});
+          {RequestId(), std::string("exit"), std::move(message), std::move(document), chrono::steady_clock::now(), ""});
     }
     threadLeave();
   }).detach();
@@ -686,9 +686,7 @@ void mainLoop() {
     // If the "exit" notification has been received, clear all index requests
     // to make indexers stop in time.
     if (g_quit.load(std::memory_order_relaxed)) {
-      index_request->apply([&](std::deque<IndexRequest> &q) {
-        q.clear();
-      });
+      index_request->apply([&](std::deque<IndexRequest> &q) { q.clear(); });
     }
 
     bool indexed = false;
@@ -771,7 +769,7 @@ void standalone(const std::string &root) {
   WorkingFiles wfiles;
   VFS vfs;
   SemaManager manager(
-      nullptr, nullptr, [](const std::string &, const std::vector<Diagnostic> &) {}, [](const RequestId &id) {});
+      nullptr, nullptr, [](const std::string &, const std::vector<Diagnostic> &) {}, [](const RequestId &) {});
 
   MessageHandler handler;
   handler.project = &project;

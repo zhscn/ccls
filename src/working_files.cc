@@ -4,7 +4,6 @@
 #include "working_files.hh"
 
 #include "log.hh"
-#include "position.hh"
 
 #include <clang/Basic/CharInfo.h>
 

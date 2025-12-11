@@ -14,7 +14,9 @@
 namespace llvm {
 template <> struct DenseMapInfo<ccls::ExtentRef> {
   static inline ccls::ExtentRef getEmptyKey() { return {}; }
-  static inline ccls::ExtentRef getTombstoneKey() { return {{ccls::Range(), ccls::Usr(-1)}}; }
+  static inline ccls::ExtentRef getTombstoneKey() {
+    return {{ccls::Range(), ccls::Usr(-1), ccls::Kind::Invalid, ccls::Role::None}, ccls::Range()};
+  }
   static unsigned getHashValue(ccls::ExtentRef sym) { return std::hash<ccls::ExtentRef>()(sym); }
   static bool isEqual(ccls::ExtentRef l, ccls::ExtentRef r) { return l == r; }
 };

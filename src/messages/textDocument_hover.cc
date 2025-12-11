@@ -65,7 +65,7 @@ std::pair<std::optional<MarkedString>, std::optional<MarkedString>> getHover(DB 
     }
     if (!hover && entity.def.size()) {
       auto &d = entity.def[0];
-      hover = {languageIdentifier(lang)};
+      hover = {languageIdentifier(lang), ""};
       if (d.hover[0])
         hover->value = d.hover;
       else if (d.detailed_name[0])

@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "utils.hh"
-
 #include <atomic>
 #include <chrono>
 #include <condition_variable>

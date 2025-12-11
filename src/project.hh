@@ -6,7 +6,6 @@
 #include "config.hh"
 #include "lsp.hh"
 
-#include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>

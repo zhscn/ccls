@@ -4,10 +4,10 @@
 #include "indexer.hh"
 
 #include "clang_tu.hh"
+#include "config.hh"
 #include "log.hh"
 #include "pipeline.hh"
-#include "platform.hh"
-#include "sema_manager.hh"
+#include "working_files.hh"
 
 #include <clang/AST/AST.h>
 #include <clang/Basic/TargetInfo.h>
@@ -25,9 +25,7 @@
 #include <llvm/Support/CrashRecoveryContext.h>
 #include <llvm/Support/Path.h>
 
-#include <algorithm>
 #include <inttypes.h>
-#include <map>
 #include <unordered_set>
 
 using namespace clang;
@@ -710,7 +708,7 @@ public:
 public:
   IndexDataConsumer(IndexParam &param) : param(param) {}
   void initialize(ASTContext &ctx) override { this->ctx = param.ctx = &ctx; }
-  bool handleDeclOccurrence(const Decl *d, index::SymbolRoleSet roles, ArrayRef<index::SymbolRelation> relations,
+  bool handleDeclOccurrence(const Decl *d, index::SymbolRoleSet roles, ArrayRef<index::SymbolRelation> /*relations*/,
                             SourceLocation src_loc, ASTNodeInfo ast_node) override {
     if (!param.no_linkage) {
       if (auto *nd = dyn_cast<NamedDecl>(d); nd && nd->hasLinkage())
@@ -1073,7 +1071,7 @@ public:
     if (reason == FileChangeReason::EnterFile)
       (void)param.consumeFile(sm.getFileID(sl));
   }
-  void InclusionDirective(SourceLocation hashLoc, const Token &tok, StringRef included, bool isAngled,
+  void InclusionDirective(SourceLocation /*hashLoc*/, const Token & /*tok*/, StringRef /*included*/, bool /*isAngled*/,
                           CharSourceRange filenameRange,
 #if LLVM_VERSION_MAJOR >= 16 // llvmorg-16-init-15080-g854c10f8d185
                           OptionalFileEntryRef fileRef,
@@ -1082,11 +1080,12 @@ public:
 #else
                           const FileEntry *file,
 #endif
-                          StringRef searchPath, StringRef relativePath, const clang::Module *suggestedModule,
+                          StringRef /*searchPath*/, StringRef /*relativePath*/,
+                          const clang::Module * /*suggestedModule*/,
 #if LLVM_VERSION_MAJOR >= 19 // llvmorg-19-init-1720-gda95d926f6fc
-                          bool moduleImported,
+                          bool /*moduleImported*/,
 #endif
-                          SrcMgr::CharacteristicKind fileType) override {
+                          SrcMgr::CharacteristicKind /*fileType*/) override {
 #if LLVM_VERSION_MAJOR >= 15 // llvmorg-15-init-7692-gd79ad2f1dbc2
     const FileEntry *file = fileRef ? &fileRef->getFileEntry() : nullptr;
 #endif
@@ -1162,7 +1161,7 @@ public:
   IndexFrontendAction(std::shared_ptr<IndexDataConsumer> dataConsumer, const index::IndexingOptions &indexOpts,
                       IndexParam &param)
       : dataConsumer(std::move(dataConsumer)), indexOpts(indexOpts), param(param) {}
-  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &ci, StringRef inFile) override {
+  std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &ci, StringRef /*inFile*/) override {
     class SkipProcessed : public ASTConsumer {
       IndexParam &param;
       const ASTContext *ctx = nullptr;
@@ -1240,7 +1239,7 @@ void init() {
   multiVersionMatcher = new GroupMatch(g_config->index.multiVersionWhitelist, g_config->index.multiVersionBlacklist);
 }
 
-IndexResult index(WorkingFiles *wfiles, VFS *vfs, const std::string &opt_wdir, const std::string &main,
+IndexResult index(WorkingFiles *wfiles, VFS *vfs, const std::string & /*opt_wdir*/, const std::string &main,
                   const std::vector<const char *> &args,
                   const std::vector<std::pair<std::string, std::string>> &remapped, bool no_linkage, bool &ok) {
   ok = true;

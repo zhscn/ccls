@@ -5,10 +5,6 @@
 #include "pipeline.hh"
 #include "project.hh"
 #include "sema_manager.hh"
-#include "working_files.hh"
-
-#include <queue>
-#include <unordered_set>
 
 namespace ccls {
 namespace {

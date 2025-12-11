@@ -4,7 +4,6 @@
 #include "clang_tu.hh"
 #include "hierarchy.hh"
 #include "message_handler.hh"
-#include "pipeline.hh"
 #include "query.hh"
 
 #include <clang/AST/Type.h>

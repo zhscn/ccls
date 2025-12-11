@@ -3,13 +3,13 @@
 
 #include "test.hh"
 
+#include "config.hh"
 #include "filesystem.hh"
 #include "indexer.hh"
 #include "pipeline.hh"
-#include "platform.hh"
-#include "sema_manager.hh"
 #include "serializer.hh"
 #include "utils.hh"
+#include "working_files.hh"
 
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Config/llvm-config.h>
@@ -94,7 +94,7 @@ std::vector<std::string> splitString(const std::string &str, const std::string &
 }
 
 void parseTestExpectation(const std::string &filename, const std::vector<std::string> &lines_with_endings,
-                          TextReplacer *replacer, std::vector<std::string> *flags,
+                          TextReplacer * /*replacer*/, std::vector<std::string> *flags,
                           std::unordered_map<std::string, std::string> *output_sections) {
   // Scan for EXTRA_FLAGS:
   {

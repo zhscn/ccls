@@ -1,14 +1,12 @@
 // Copyright 2017-2018 ccls Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "filesystem.hh"
 #include "log.hh"
 #include "message_handler.hh"
 #include "pipeline.hh"
 #include "platform.hh"
 #include "project.hh"
 #include "sema_manager.hh"
-#include "working_files.hh"
 
 #include <llvm/ADT/Twine.h>
 #include <llvm/Config/llvm-config.h>
@@ -463,7 +461,7 @@ void MessageHandler::initialize(JsonReader &reader, ReplyOnce &reply) {
 void standaloneInitialize(MessageHandler &handler, const std::string &root) {
   InitializeParam param;
   param.rootUri = DocumentUri::fromPath(root);
-  ReplyOnce reply{handler};
+  ReplyOnce reply{handler, {}};
   do_initialize(&handler, param, reply);
 }
 

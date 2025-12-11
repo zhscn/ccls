@@ -3,11 +3,11 @@
 
 #include "lsp.hh"
 
+#include "config.hh"
 #include "log.hh"
 
 #include <rapidjson/document.h>
 
-#include <algorithm>
 #include <stdio.h>
 
 namespace ccls {

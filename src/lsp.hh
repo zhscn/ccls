@@ -3,14 +3,11 @@
 
 #pragma once
 
-#include "config.hh"
 #include "serializer.hh"
-#include "utils.hh"
 
 #include <rapidjson/fwd.h>
 
 #include <chrono>
-#include <iosfwd>
 #include <string>
 
 namespace ccls {
@@ -158,7 +155,7 @@ enum class SymbolKind : uint8_t {
 
 struct SymbolInformation {
   std::string_view name;
-  SymbolKind kind;
+  SymbolKind kind = SymbolKind::Unknown;
   Location location;
   std::optional<std::string_view> containerName;
 };

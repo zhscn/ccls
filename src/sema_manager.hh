@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "clang_tu.hh"
 #include "lsp.hh"
+#include "position.hh"
 #include "project.hh"
 #include "threaded_queue.hh"
 #include "working_files.hh"

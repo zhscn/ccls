@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "message_handler.hh"
-#include "pipeline.hh"
 #include "project.hh"
 #include "query.hh"
 
@@ -114,7 +113,7 @@ void reflect(JsonWriter &vis, std::unique_ptr<DocumentSymbol> &v);
 REFLECT_STRUCT(DocumentSymbol, name, detail, kind, range, selectionRange, children);
 void reflect(JsonWriter &vis, std::unique_ptr<DocumentSymbol> &v) { reflect(vis, *v); }
 
-template <typename Def> bool ignore(const Def *def) { return false; }
+template <typename Def> bool ignore(const Def *) { return false; }
 template <> bool ignore(const QueryType::Def *def) { return !def || def->kind == SymbolKind::TypeParameter; }
 template <> bool ignore(const QueryVar::Def *def) { return !def || def->is_local(); }
 } // namespace

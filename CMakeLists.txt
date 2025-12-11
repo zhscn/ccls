@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.14)
 project(ccls LANGUAGES CXX C)
 
 option(USE_SYSTEM_RAPIDJSON "Use system RapidJSON instead of the git submodule if exists" ON)
@@ -54,6 +54,7 @@ else()
   # Common GCC/Clang(Linux) options
   target_compile_options(ccls PRIVATE
                          -Wall
+                         -Wextra
                          -Wno-sign-compare
                          )
 

@@ -1,12 +1,12 @@
 // Copyright 2017-2018 ccls Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include "config.hh"
 #include "log.hh"
 #include "pipeline.hh"
 #include "platform.hh"
 #include "serializer.hh"
 #include "test.hh"
-#include "working_files.hh"
 
 #include <clang/Basic/Version.h>
 #include <llvm/Support/CommandLine.h>
@@ -22,7 +22,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 using namespace ccls;

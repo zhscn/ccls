@@ -7,7 +7,6 @@
 #include <string_view>
 
 #include <cstdint>
-#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -66,7 +65,7 @@ int reverseSubseqMatch(std::string_view pat, std::string_view text, int case_sen
 //  };
 //  MAKE_HASHABLE(SomeHashKey, t.key1, t.key2, t.key3)
 
-inline void hash_combine(std::size_t &seed) {}
+inline void hash_combine(std::size_t &) {}
 
 template <typename T, typename... Rest> inline void hash_combine(std::size_t &seed, const T &v, Rest... rest) {
   std::hash<T> hasher;

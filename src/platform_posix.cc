@@ -14,7 +14,6 @@
 #include <time.h>
 
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
@@ -30,9 +29,6 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/Support/Path.h>
 
-#include <atomic>
-#include <condition_variable>
-#include <mutex>
 #include <string>
 
 namespace ccls {

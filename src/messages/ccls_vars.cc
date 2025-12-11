@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "message_handler.hh"
-#include "pipeline.hh"
 #include "query.hh"
 
 namespace ccls {

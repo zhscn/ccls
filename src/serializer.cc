@@ -3,7 +3,7 @@
 
 #include "serializer.hh"
 
-#include "filesystem.hh"
+#include "config.hh"
 #include "indexer.hh"
 #include "log.hh"
 #include "message_handler.hh"
@@ -15,6 +15,7 @@
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/Allocator.h>
+#include <llvm/Support/Path.h>
 
 #include <mutex>
 #include <stdexcept>
@@ -140,8 +141,8 @@ void reflect(JsonWriter &vis, std::string_view &data) {
     vis.string(&data[0], (rapidjson::SizeType)data.size());
 }
 
-void reflect(JsonReader &vis, JsonNull &v) {}
-void reflect(JsonWriter &vis, JsonNull &v) { vis.m->Null(); }
+void reflect(JsonReader &, JsonNull &) {}
+void reflect(JsonWriter &vis, JsonNull &) { vis.m->Null(); }
 
 template <typename V> void reflect(JsonReader &vis, std::unordered_map<Usr, V> &v) {
   vis.iterArray([&]() {

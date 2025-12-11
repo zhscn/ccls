@@ -12,7 +12,6 @@
 #include <llvm/ADT/STLExtras.h>
 
 #include <assert.h>
-#include <functional>
 #include <limits.h>
 #include <optional>
 #include <stdint.h>
@@ -260,7 +259,7 @@ void DB::applyIndexUpdate(IndexUpdate *u) {
   // References (Use &use) in this function are important to update file_id.
   auto ref = [&](std::unordered_map<int, int> &lid2fid, Usr usr, Kind kind, Use &use, int delta) {
     use.file_id = use.file_id == -1 ? u->file_id : lid2fid.find(use.file_id)->second;
-    ExtentRef sym{{use.range, usr, kind, use.role}};
+    ExtentRef sym{{use.range, usr, kind, use.role}, {}};
     int &v = files[use.file_id].symbol2refcnt[sym];
     v += delta;
     assert(v >= 0);

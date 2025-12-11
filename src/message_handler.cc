@@ -3,7 +3,6 @@
 
 #include "message_handler.hh"
 
-#include "log.hh"
 #include "pipeline.hh"
 #include "project.hh"
 #include "query.hh"
