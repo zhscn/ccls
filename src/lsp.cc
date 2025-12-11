@@ -6,21 +6,16 @@
 #include "config.hh"
 #include "log.hh"
 
-#include <rapidjson/document.h>
-
 #include <stdio.h>
 
 namespace ccls {
 void reflect(JsonReader &vis, RequestId &v) {
-  if (vis.m->IsInt64()) {
+  if (auto i = vis.m->getAsInteger(); i) {
     v.type = RequestId::kInt;
-    v.value = std::to_string(int(vis.m->GetInt64()));
-  } else if (vis.m->IsInt()) {
-    v.type = RequestId::kInt;
-    v.value = std::to_string(vis.m->GetInt());
-  } else if (vis.m->IsString()) {
+    v.value = std::to_string(*i);
+  } else if (auto s = vis.m->getAsString(); s) {
     v.type = RequestId::kString;
-    v.value = vis.m->GetString();
+    v.value = s->str();
   } else {
     v.type = RequestId::kNone;
     v.value.clear();

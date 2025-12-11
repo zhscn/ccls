@@ -19,10 +19,10 @@
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/ADT/StringSet.h>
 #include <llvm/Support/GlobPattern.h>
+#include <llvm/Support/JSON.h>
 #include <llvm/Support/LineIterator.h>
 #include <llvm/Support/Program.h>
-
-#include <rapidjson/writer.h>
+#include <llvm/Support/raw_ostream.h>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -289,11 +289,11 @@ void Project::loadDirectory(const std::string &root, Project::Folder &folder) {
     sys::path::append(path, cdbDir, "compile_commands.json");
     sys::path::append(stdinPath, cdbDir, "stdin");
     {
-      rapidjson::StringBuffer sb;
-      rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+      std::string input;
+      llvm::raw_string_ostream os(input);
+      llvm::json::OStream writer(os);
       JsonWriter json_writer(&writer);
       reflect(json_writer, *g_config);
-      std::string input = sb.GetString();
       FILE *fout = fopen(stdinPath.c_str(), "wb");
       fwrite(input.c_str(), input.size(), 1, fout);
       fclose(fout);

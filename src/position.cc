@@ -5,9 +5,6 @@
 
 #include "serializer.hh"
 
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
-
 #include <algorithm>
 #include <limits.h>
 #include <stdio.h>

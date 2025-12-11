@@ -7,8 +7,7 @@
 #include "project.hh"
 #include "query.hh"
 
-#include <rapidjson/document.h>
-#include <rapidjson/reader.h>
+#include <llvm/Support/JSON.h>
 
 #include <llvm/ADT/STLExtras.h>
 
@@ -210,10 +209,16 @@ MessageHandler::MessageHandler() {
 }
 
 void MessageHandler::run(InMessage &msg) {
-  rapidjson::Document &doc = *msg.document;
-  rapidjson::Value null;
-  auto it = doc.FindMember("params");
-  JsonReader reader(it != doc.MemberEnd() ? &it->value : &null);
+  if (!msg.document)
+    return;
+  llvm::json::Value null = nullptr;
+  llvm::json::Value *params = nullptr;
+  if (auto obj = msg.document->getAsObject(); obj) {
+    if (auto p = obj->get("params"); p) {
+      params = p;
+    }
+  }
+  JsonReader reader(params);
   if (msg.id.valid()) {
     ReplyOnce reply{*this, msg.id};
     auto it = method2request.find(msg.method);

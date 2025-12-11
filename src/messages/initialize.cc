@@ -10,10 +10,9 @@
 
 #include <llvm/ADT/Twine.h>
 #include <llvm/Config/llvm-config.h>
+#include <llvm/Support/JSON.h>
 #include <llvm/Support/Threading.h>
-
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <stdexcept>
 #include <stdlib.h>
@@ -250,16 +249,16 @@ struct InitializeParam {
 };
 
 void reflect(JsonReader &reader, InitializeParam::Trace &value) {
-  if (!reader.m->IsString()) {
+  auto v = reader.m->getAsString();
+  if (!v) {
     value = InitializeParam::Trace::Off;
     return;
   }
-  std::string v = reader.m->GetString();
-  if (v == "off")
+  if (*v == "off")
     value = InitializeParam::Trace::Off;
-  else if (v == "messages")
+  else if (*v == "messages")
     value = InitializeParam::Trace::Messages;
-  else if (v == "verbose")
+  else if (*v == "verbose")
     value = InitializeParam::Trace::Verbose;
 }
 
@@ -321,11 +320,10 @@ void do_initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) 
 
   {
     g_config = new Config(param.initializationOptions);
-    rapidjson::Document reader;
     for (const std::string &str : g_init_options) {
-      reader.Parse(str.c_str());
-      if (!reader.HasParseError()) {
-        JsonReader json_reader{&reader};
+      auto reader = llvm::json::parse(str);
+      if (reader) {
+        JsonReader json_reader{&*reader};
         try {
           reflect(json_reader, *g_config);
         } catch (std::invalid_argument &) {
@@ -335,11 +333,12 @@ void do_initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) 
       }
     }
 
-    rapidjson::StringBuffer output;
-    rapidjson::Writer<rapidjson::StringBuffer> writer(output);
+    std::string output;
+    llvm::raw_string_ostream os(output);
+    llvm::json::OStream writer(os);
     JsonWriter json_writer(&writer);
     reflect(json_writer, *g_config);
-    LOG_S(INFO) << "initializationOptions: " << output.GetString();
+    LOG_S(INFO) << "initializationOptions: " << output;
 
     if (g_config->cache.directory.size()) {
       SmallString<256> path(g_config->cache.directory);
@@ -440,15 +439,18 @@ void do_initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) 
 void MessageHandler::initialize(JsonReader &reader, ReplyOnce &reply) {
   InitializeParam param;
   reflect(reader, param);
-  auto it = reader.m->FindMember("initializationOptions");
-  if (it != reader.m->MemberEnd() && it->value.IsObject()) {
-    JsonReader m1(&it->value);
-    try {
-      reflect(m1, param.initializationOptions);
-    } catch (std::invalid_argument &) {
-      reader.path_.push_back("initializationOptions");
-      reader.path_.insert(reader.path_.end(), m1.path_.begin(), m1.path_.end());
-      throw;
+  if (auto obj = reader.m->getAsObject(); obj) {
+    if (auto opt = obj->get("initializationOptions"); opt) {
+      if (opt->getAsObject()) {
+        JsonReader m1(opt);
+        try {
+          reflect(m1, param.initializationOptions);
+        } catch (std::invalid_argument &) {
+          reader.path_.push_back("initializationOptions");
+          reader.path_.insert(reader.path_.end(), m1.path_.begin(), m1.path_.end());
+          throw;
+        }
+      }
     }
   }
   if (!param.rootUri) {

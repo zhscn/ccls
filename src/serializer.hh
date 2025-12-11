@@ -6,9 +6,9 @@
 #include "utils.hh"
 
 #include <llvm/Support/Compiler.h>
+#include <llvm/Support/JSON.h>
 
 #include <macro_map.h>
-#include <rapidjson/fwd.h>
 
 #include <cassert>
 #include <memory>
@@ -29,10 +29,10 @@ enum class SerializeFormat { Binary, Json };
 struct JsonNull {};
 
 struct JsonReader {
-  rapidjson::Value *m;
+  const llvm::json::Value *m;
   std::vector<const char *> path_;
 
-  JsonReader(rapidjson::Value *m) : m(m) {}
+  JsonReader(const llvm::json::Value *m) : m(m) {}
   void startObject() {}
   void endObject() {}
   void iterArray(llvm::function_ref<void()> fn);
@@ -43,12 +43,9 @@ struct JsonReader {
 };
 
 struct JsonWriter {
-  using W = rapidjson::Writer<rapidjson::StringBuffer, rapidjson::UTF8<char>, rapidjson::UTF8<char>,
-                              rapidjson::CrtAllocator, 0>;
+  llvm::json::OStream *m;
 
-  W *m;
-
-  JsonWriter(W *m) : m(m) {}
+  JsonWriter(llvm::json::OStream *m) : m(m) {}
   void startArray();
   void endArray();
   void startObject();

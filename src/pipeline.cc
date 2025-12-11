@@ -13,12 +13,11 @@
 #include "query.hh"
 #include "sema_manager.hh"
 
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
-
+#include <llvm/Support/JSON.h>
 #include <llvm/Support/Path.h>
 #include <llvm/Support/Process.h>
 #include <llvm/Support/Threading.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <chrono>
 #include <inttypes.h>
@@ -560,12 +559,12 @@ void launchStdin() {
 
       auto message = std::make_unique<char[]>(len);
       std::copy(str.begin(), str.end(), message.get());
-      auto document = std::make_unique<rapidjson::Document>();
-      document->Parse(message.get(), len);
-      assert(!document->HasParseError());
+      auto expected = llvm::json::parse(llvm::StringRef(message.get(), len));
+      assert(expected && "Parse error");
+      std::optional<llvm::json::Value> document = std::move(*expected);
 
-      JsonReader reader{document.get()};
-      if (!reader.m->HasMember("jsonrpc") || std::string((*reader.m)["jsonrpc"].GetString()) != "2.0")
+      JsonReader reader{&*document};
+      if (auto obj = document->getAsObject(); !obj || !obj->getString("jsonrpc") || *obj->getString("jsonrpc") != "2.0")
         break;
       RequestId id;
       std::string method;
@@ -589,11 +588,10 @@ void launchStdin() {
 
   quit:
     if (!received_exit) {
-      const std::string_view str("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+      const llvm::StringRef str("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
       auto message = std::make_unique<char[]>(str.size());
       std::copy(str.begin(), str.end(), message.get());
-      auto document = std::make_unique<rapidjson::Document>();
-      document->Parse(message.get(), str.size());
+      std::optional<llvm::json::Value> document = std::move(*llvm::json::parse(str));
       on_request->pushBack(
           {RequestId(), std::string("exit"), std::move(message), std::move(document), chrono::steady_clock::now(), ""});
     }
@@ -828,50 +826,48 @@ std::optional<std::string> loadIndexedContent(const std::string &path) {
 }
 
 void notifyOrRequest(const char *method, bool request, const std::function<void(JsonWriter &)> &fn) {
-  rapidjson::StringBuffer output;
-  rapidjson::Writer<rapidjson::StringBuffer> w(output);
-  w.StartObject();
-  w.Key("jsonrpc");
-  w.String("2.0");
-  w.Key("method");
-  w.String(method);
+  std::string output;
+  llvm::raw_string_ostream os(output);
+  llvm::json::OStream w(os);
+  w.objectBegin();
+  w.attribute("jsonrpc", "2.0");
+  w.attribute("method", method);
   if (request) {
-    w.Key("id");
-    w.Int64(request_id.fetch_add(1, std::memory_order_relaxed));
+    w.attribute("id", request_id.fetch_add(1, std::memory_order_relaxed));
   }
-  w.Key("params");
+  w.attributeBegin("params");
   JsonWriter writer(&w);
   fn(writer);
-  w.EndObject();
+  w.objectEnd();
   LOG_V(2) << (request ? "RequestMessage: " : "NotificationMessage: ") << method;
-  for_stdout->pushBack(output.GetString());
+  for_stdout->pushBack(std::move(output));
 }
 
 static void reply(const RequestId &id, const char *key, const std::function<void(JsonWriter &)> &fn) {
-  rapidjson::StringBuffer output;
-  rapidjson::Writer<rapidjson::StringBuffer> w(output);
-  w.StartObject();
-  w.Key("jsonrpc");
-  w.String("2.0");
-  w.Key("id");
+  std::string output;
+  llvm::raw_string_ostream os(output);
+  llvm::json::OStream w(os);
+  w.objectBegin();
+  w.attribute("jsonrpc", "2.0");
+  w.attributeBegin("id");
   switch (id.type) {
   case RequestId::kNone:
-    w.Null();
+    w.value(nullptr);
     break;
   case RequestId::kInt:
-    w.Int64(atoll(id.value.c_str()));
+    w.value(atoll(id.value.c_str()));
     break;
   case RequestId::kString:
-    w.String(id.value.c_str(), id.value.size());
+    w.value(id.value);
     break;
   }
-  w.Key(key);
+  w.attributeBegin(key);
   JsonWriter writer(&w);
   fn(writer);
-  w.EndObject();
+  w.objectEnd();
   if (id.valid())
     LOG_V(2) << "respond to RequestMessage: " << id.value;
-  for_stdout->pushBack(output.GetString());
+  for_stdout->pushBack(std::move(output));
 }
 
 void reply(const RequestId &id, const std::function<void(JsonWriter &)> &fn) { reply(id, "result", fn); }

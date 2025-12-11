@@ -7,8 +7,6 @@
 #include "pipeline.hh"
 #include "serializer.hh"
 
-#include <rapidjson/document.h>
-
 #include <llvm/ADT/STLExtras.h>
 
 #include <assert.h>

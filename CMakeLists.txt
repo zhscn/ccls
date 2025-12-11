@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 project(ccls LANGUAGES CXX C)
 
-option(USE_SYSTEM_RAPIDJSON "Use system RapidJSON instead of the git submodule if exists" ON)
-
 # Sources for the executable are specified at end of CMakeLists.txt
 add_executable(ccls "")
 
@@ -160,28 +158,9 @@ set_property(SOURCE src/utils.cc APPEND PROPERTY COMPILE_DEFINITIONS
 
 ### Includes
 
-if(USE_SYSTEM_RAPIDJSON)
-  set(RapidJSON_MIN_VERSION "1.1.0")
-  find_package(RapidJSON ${RapidJSON_MIN_VERSION} QUIET)
-  if(NOT DEFINED RapidJSON_INCLUDE_DIRS AND DEFINED RAPIDJSON_INCLUDE_DIRS)
-    set(RapidJSON_INCLUDE_DIRS "${RAPIDJSON_INCLUDE_DIRS}")
-  endif()
-endif()
-if(NOT RapidJSON_FOUND)
-  if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/rapidjson/include")
-    message(STATUS "Using local RapidJSON")
-    set(RapidJSON_INCLUDE_DIRS third_party/rapidjson/include)
-  else()
-    message(STATUS "Plase initialize rapidJSON git submodule as currently installed version is to old:")
-    message(STATUS "git submodule init && git submodule update")
-    message(FATAL_ERROR "RapidJSON version is likely too old. See https://github.com/MaskRay/ccls/issues/455")
-  endif()
-endif()
-
 target_include_directories(ccls PRIVATE src)
 
-foreach(include_dir third_party
-    ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS} ${RapidJSON_INCLUDE_DIRS})
+foreach(include_dir third_party ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
   get_filename_component(include_dir_realpath ${include_dir} REALPATH)
   # Don't add as SYSTEM if they are in CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES.
   # It would reorder the system search paths and cause issues with libstdc++'s
@@ -255,7 +234,16 @@ if(NOT CCLS_VERSION)
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
   if(NOT CCLS_VERSION)
-    set(CCLS_VERSION "<unknown>")
+    execute_process(COMMAND git log -1 --format=%cd --date=format:%Y%m%d
+      OUTPUT_VARIABLE HEAD_DATE
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    if(HEAD_DATE)
+      set(CCLS_VERSION "0.${HEAD_DATE}")
+    else()
+      set(CCLS_VERSION "<unknown>")
+    endif()
   endif()
 endif()
 

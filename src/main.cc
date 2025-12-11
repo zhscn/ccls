@@ -12,12 +12,10 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/CrashRecoveryContext.h>
 #include <llvm/Support/FileSystem.h>
+#include <llvm/Support/JSON.h>
 #include <llvm/Support/Process.h>
 #include <llvm/Support/Program.h>
 #include <llvm/Support/Signals.h>
-
-#include <rapidjson/document.h>
-#include <rapidjson/error/en.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,15 +93,15 @@ int main(int argc, char **argv) {
       // We check syntax error here but override client-side
       // initializationOptions in messages/initialize.cc
       g_init_options = opt_init;
-      rapidjson::Document reader;
       for (const std::string &str : g_init_options) {
-        rapidjson::ParseResult ok = reader.Parse(str.c_str());
-        if (!ok) {
-          fprintf(stderr, "Failed to parse --init as JSON: %s (%zd)\n", rapidjson::GetParseError_En(ok.Code()),
-                  ok.Offset());
+        auto expected = llvm::json::parse(str);
+        if (!expected) {
+          llvm::handleAllErrors(expected.takeError(), [](const llvm::ErrorInfoBase &e) {
+            fprintf(stderr, "Failed to parse --init as JSON: %s\n", e.message().c_str());
+          });
           return 1;
         }
-        JsonReader json_reader{&reader};
+        JsonReader json_reader{&expected.get()};
         try {
           Config config;
           reflect(json_reader, config);

@@ -8,14 +8,13 @@
 #include "log.hh"
 #include "message_handler.hh"
 
-#include <rapidjson/document.h>
-#include <rapidjson/prettywriter.h>
-
 #include <llvm/ADT/CachedHashString.h>
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/Allocator.h>
+#include <llvm/Support/JSON.h>
 #include <llvm/Support/Path.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <mutex>
 #include <stdexcept>
@@ -27,11 +26,12 @@ bool gTestOutputMode = false;
 namespace ccls {
 
 void JsonReader::iterArray(llvm::function_ref<void()> fn) {
-  if (!m->IsArray())
+  auto arr = m->getAsArray();
+  if (!arr)
     throw std::invalid_argument("array");
   // Use "0" to indicate any element for now.
   path_.push_back("0");
-  for (auto &entry : m->GetArray()) {
+  for (auto &entry : *arr) {
     auto saved = m;
     m = &entry;
     fn();
@@ -41,17 +41,22 @@ void JsonReader::iterArray(llvm::function_ref<void()> fn) {
 }
 void JsonReader::member(const char *name, llvm::function_ref<void()> fn) {
   path_.push_back(name);
-  auto it = m->FindMember(name);
-  if (it != m->MemberEnd()) {
-    auto saved = m;
-    m = &it->value;
-    fn();
-    m = saved;
+  if (auto obj = m->getAsObject(); obj) {
+    auto *it = obj->get(name);
+    if (it) {
+      auto saved = m;
+      m = it;
+      fn();
+      m = saved;
+    }
   }
   path_.pop_back();
 }
-bool JsonReader::isNull() { return m->IsNull(); }
-std::string JsonReader::getString() { return m->GetString(); }
+bool JsonReader::isNull() { return m->kind() == llvm::json::Value::Null; }
+std::string JsonReader::getString() {
+  auto s = m->getAsString();
+  return s ? s->str() : "";
+}
 std::string JsonReader::getPath() const {
   std::string ret;
   for (auto &t : path_)
@@ -66,42 +71,75 @@ std::string JsonReader::getPath() const {
   return ret;
 }
 
-void JsonWriter::startArray() { m->StartArray(); }
-void JsonWriter::endArray() { m->EndArray(); }
-void JsonWriter::startObject() { m->StartObject(); }
-void JsonWriter::endObject() { m->EndObject(); }
-void JsonWriter::key(const char *name) { m->Key(name); }
-void JsonWriter::null_() { m->Null(); }
-void JsonWriter::int64(int64_t v) { m->Int64(v); }
-void JsonWriter::string(const char *s) { m->String(s); }
-void JsonWriter::string(const char *s, size_t len) { m->String(s, len); }
+void JsonWriter::startArray() { m->arrayBegin(); }
+void JsonWriter::endArray() { m->arrayEnd(); }
+void JsonWriter::startObject() { m->objectBegin(); }
+void JsonWriter::endObject() { m->objectEnd(); }
+void JsonWriter::key(const char *name) { m->attributeBegin(name); }
+void JsonWriter::null_() { m->value(nullptr); }
+void JsonWriter::int64(int64_t v) { m->value(v); }
+void JsonWriter::string(const char *s) { m->value(s); }
+void JsonWriter::string(const char *s, size_t len) { m->value(llvm::StringRef(s, len)); }
 
 // clang-format off
-void reflect(JsonReader &vis, bool &v              ) { if (!vis.m->IsBool())   throw std::invalid_argument("bool");               v = vis.m->GetBool(); }
-void reflect(JsonReader &vis, unsigned char &v     ) { if (!vis.m->IsInt())    throw std::invalid_argument("uint8_t");            v = (uint8_t)vis.m->GetInt(); }
-void reflect(JsonReader &vis, short &v             ) { if (!vis.m->IsInt())    throw std::invalid_argument("short");              v = (short)vis.m->GetInt(); }
-void reflect(JsonReader &vis, unsigned short &v    ) { if (!vis.m->IsInt())    throw std::invalid_argument("unsigned short");     v = (unsigned short)vis.m->GetInt(); }
-void reflect(JsonReader &vis, int &v               ) { if (!vis.m->IsInt())    throw std::invalid_argument("int");                v = vis.m->GetInt(); }
-void reflect(JsonReader &vis, unsigned &v          ) { if (!vis.m->IsUint64()) throw std::invalid_argument("unsigned");           v = (unsigned)vis.m->GetUint64(); }
-void reflect(JsonReader &vis, long &v              ) { if (!vis.m->IsInt64())  throw std::invalid_argument("long");               v = (long)vis.m->GetInt64(); }
-void reflect(JsonReader &vis, unsigned long &v     ) { if (!vis.m->IsUint64()) throw std::invalid_argument("unsigned long");      v = (unsigned long)vis.m->GetUint64(); }
-void reflect(JsonReader &vis, long long &v         ) { if (!vis.m->IsInt64())  throw std::invalid_argument("long long");          v = vis.m->GetInt64(); }
-void reflect(JsonReader &vis, unsigned long long &v) { if (!vis.m->IsUint64()) throw std::invalid_argument("unsigned long long"); v = vis.m->GetUint64(); }
-void reflect(JsonReader &vis, double &v            ) { if (!vis.m->IsDouble()) throw std::invalid_argument("double");             v = vis.m->GetDouble(); }
-void reflect(JsonReader &vis, const char *&v       ) { if (!vis.m->IsString()) throw std::invalid_argument("string");             v = intern(vis.getString()); }
-void reflect(JsonReader &vis, std::string &v       ) { if (!vis.m->IsString()) throw std::invalid_argument("string");             v = vis.getString(); }
+void reflect(JsonReader &vis, bool &v              ) { auto b = vis.m->getAsBoolean(); if (!b) throw std::invalid_argument("bool");               v = *b; }
+void reflect(JsonReader &vis, unsigned char &v     ) { auto i = vis.m->getAsInteger(); if (!i) throw std::invalid_argument("uint8_t");            v = (uint8_t)*i; }
+void reflect(JsonReader &vis, short &v             ) { auto i = vis.m->getAsInteger(); if (!i) throw std::invalid_argument("short");              v = (short)*i; }
+void reflect(JsonReader &vis, unsigned short &v    ) { auto i = vis.m->getAsInteger(); if (!i) throw std::invalid_argument("unsigned short");     v = (unsigned short)*i; }
+void reflect(JsonReader &vis, int &v               ) { auto i = vis.m->getAsInteger(); if (!i) throw std::invalid_argument("int");                v = (int)*i; }
+void reflect(JsonReader &vis, unsigned &v          ) { auto i = vis.m->getAsInteger(); if (!i) throw std::invalid_argument("unsigned");           v = (unsigned)*i; }
+void reflect(JsonReader &vis, long &v              ) {
+  // Try to read as string first for 64-bit compatibility
+  if (auto s = vis.m->getAsString()) {
+    v = std::strtoul(s->data(), nullptr, 10);
+  } else {
+    auto i = vis.m->getAsInteger();
+    if (!i) throw std::invalid_argument("long");
+    v = (long)*i;
+  }
+}
+void reflect(JsonReader &vis, unsigned long &v     ) {
+  if (auto s = vis.m->getAsString()) {
+    v = std::strtoul(s->data(), nullptr, 10);
+  } else {
+    auto i = vis.m->getAsInteger();
+    if (!i) throw std::invalid_argument("unsigned long");
+    v = (unsigned long)*i;
+  }
+}
+void reflect(JsonReader &vis, long long &v         ) {
+  if (auto s = vis.m->getAsString()) {
+    v = std::strtoll(s->data(), nullptr, 10);
+  } else {
+    auto i = vis.m->getAsInteger();
+    if (!i) throw std::invalid_argument("long long");
+    v = (long long)*i;
+  }
+}
+void reflect(JsonReader &vis, unsigned long long &v) {
+  if (auto s = vis.m->getAsString()) {
+    v = std::strtoull(s->data(), nullptr, 10);
+  } else {
+    auto i = vis.m->getAsInteger();
+    if (!i) throw std::invalid_argument("unsigned long long");
+    v = (unsigned long long)*i;
+  }
+}
+void reflect(JsonReader &vis, double &v            ) { auto d = vis.m->getAsNumber(); if (!d) throw std::invalid_argument("double");             v = *d; }
+void reflect(JsonReader &vis, const char *&v       ) { auto s = vis.m->getAsString(); if (!s) throw std::invalid_argument("string");             v = intern(*s); }
+void reflect(JsonReader &vis, std::string &v       ) { auto s = vis.m->getAsString(); if (!s) throw std::invalid_argument("string");             v = s->str(); }
 
-void reflect(JsonWriter &vis, bool &v              ) { vis.m->Bool(v); }
-void reflect(JsonWriter &vis, unsigned char &v     ) { vis.m->Int(v); }
-void reflect(JsonWriter &vis, short &v             ) { vis.m->Int(v); }
-void reflect(JsonWriter &vis, unsigned short &v    ) { vis.m->Int(v); }
-void reflect(JsonWriter &vis, int &v               ) { vis.m->Int(v); }
-void reflect(JsonWriter &vis, unsigned &v          ) { vis.m->Uint64(v); }
-void reflect(JsonWriter &vis, long &v              ) { vis.m->Int64(v); }
-void reflect(JsonWriter &vis, unsigned long &v     ) { vis.m->Uint64(v); }
-void reflect(JsonWriter &vis, long long &v         ) { vis.m->Int64(v); }
-void reflect(JsonWriter &vis, unsigned long long &v) { vis.m->Uint64(v); }
-void reflect(JsonWriter &vis, double &v            ) { vis.m->Double(v); }
+void reflect(JsonWriter &vis, bool &v              ) { vis.m->value(v); }
+void reflect(JsonWriter &vis, unsigned char &v     ) { vis.m->value(v); }
+void reflect(JsonWriter &vis, short &v             ) { vis.m->value(v); }
+void reflect(JsonWriter &vis, unsigned short &v    ) { vis.m->value(v); }
+void reflect(JsonWriter &vis, int &v               ) { vis.m->value(v); }
+void reflect(JsonWriter &vis, unsigned &v          ) { vis.m->value(v); }
+void reflect(JsonWriter &vis, long &v              ) { vis.string(std::to_string(v).c_str()); }
+void reflect(JsonWriter &vis, unsigned long &v     ) { vis.string(std::to_string(v).c_str()); }
+void reflect(JsonWriter &vis, long long &v         ) { vis.string(std::to_string(v).c_str()); }
+void reflect(JsonWriter &vis, unsigned long long &v) { vis.string(std::to_string(v).c_str()); }
+void reflect(JsonWriter &vis, double &v            ) { vis.m->value(v); }
 void reflect(JsonWriter &vis, const char *&v       ) { vis.string(v); }
 void reflect(JsonWriter &vis, std::string &v       ) { vis.string(v.c_str(), v.size()); }
 
@@ -138,11 +176,11 @@ void reflect(JsonWriter &vis, std::string_view &data) {
   if (data.empty())
     vis.string("");
   else
-    vis.string(&data[0], (rapidjson::SizeType)data.size());
+    vis.string(data.data(), data.size());
 }
 
 void reflect(JsonReader &, JsonNull &) {}
-void reflect(JsonWriter &vis, JsonNull &) { vis.m->Null(); }
+void reflect(JsonWriter &vis, JsonNull &) { vis.m->value(nullptr); }
 
 template <typename V> void reflect(JsonReader &vis, std::unordered_map<Usr, V> &v) {
   vis.iterArray([&]() {
@@ -175,15 +213,19 @@ template <typename V> void reflect(BinaryWriter &vis, std::unordered_map<Usr, V>
 
 // Used by IndexFile::dependencies.
 void reflect(JsonReader &vis, DenseMap<CachedHashStringRef, int64_t> &v) {
-  std::string name;
-  for (auto it = vis.m->MemberBegin(); it != vis.m->MemberEnd(); ++it)
-    v[internH(it->name.GetString())] = it->value.GetInt64();
+  auto obj = vis.m->getAsObject();
+  if (!obj)
+    return;
+  for (auto it = obj->begin(); it != obj->end(); ++it) {
+    auto i = it->second.getAsInteger();
+    if (i)
+      v[internH(it->first)] = *i;
+  }
 }
 void reflect(JsonWriter &vis, DenseMap<CachedHashStringRef, int64_t> &v) {
   vis.startObject();
   for (auto &it : v) {
-    vis.m->Key(it.first.val().data()); // llvm 8 -> data()
-    vis.m->Int64(it.second);
+    vis.m->attribute(it.first.val(), it.second);
   }
   vis.endObject();
 }
@@ -388,7 +430,7 @@ void reflect(JsonWriter &vis, SerializeFormat &v) {
 }
 
 void reflectMemberStart(JsonReader &vis) {
-  if (!vis.m->IsObject())
+  if (vis.m->kind() != llvm::json::Value::Object)
     throw std::invalid_argument("object");
 }
 
@@ -425,19 +467,16 @@ std::string serialize(SerializeFormat format, IndexFile &file) {
     return writer.take();
   }
   case SerializeFormat::Json: {
-    rapidjson::StringBuffer output;
-    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(output);
-    writer.SetFormatOptions(rapidjson::PrettyFormatOptions::kFormatSingleLineArray);
-    writer.SetIndent(' ', 2);
+    std::string output;
+    llvm::raw_string_ostream os(output);
+    llvm::json::OStream writer(os, 2);
     JsonWriter json_writer(&writer);
     if (!gTestOutputMode) {
       std::string version = std::to_string(IndexFile::kMajorVersion);
-      for (char c : version)
-        output.Put(c);
-      output.Put('\n');
+      os << version << "\n";
     }
     reflectFile(json_writer, file);
-    return output.GetString();
+    return output;
   }
   }
   return "";
@@ -470,22 +509,25 @@ std::unique_ptr<IndexFile> deserialize(SerializeFormat format, const std::string
     break;
   }
   case SerializeFormat::Json: {
-    rapidjson::Document reader;
+    llvm::StringRef json_content;
     if (gTestOutputMode || !expected_version) {
-      reader.Parse(serialized_index_content.c_str());
+      json_content = serialized_index_content;
     } else {
       const char *p = strchr(serialized_index_content.c_str(), '\n');
       if (!p)
         return nullptr;
       if (atoi(serialized_index_content.c_str()) != *expected_version)
         return nullptr;
-      reader.Parse(p + 1);
+      json_content = llvm::StringRef(p + 1);
     }
-    if (reader.HasParseError())
+
+    auto expected = llvm::json::parse(json_content);
+    if (!expected)
       return nullptr;
+    llvm::json::Value root = std::move(*expected);
 
     file = std::make_unique<IndexFile>(path, file_content, false);
-    JsonReader json_reader{&reader};
+    JsonReader json_reader{&root};
     try {
       reflectFile(json_reader, *file);
     } catch (std::invalid_argument &e) {

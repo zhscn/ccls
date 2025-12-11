@@ -5,7 +5,7 @@
 
 #include "serializer.hh"
 
-#include <rapidjson/fwd.h>
+#include <llvm/Support/JSON.h>
 
 #include <chrono>
 #include <string>
@@ -28,7 +28,7 @@ struct InMessage {
   RequestId id;
   std::string method;
   std::unique_ptr<char[]> message;
-  std::unique_ptr<rapidjson::Document> document;
+  std::optional<llvm::json::Value> document;
   std::chrono::steady_clock::time_point deadline;
   std::string backlog_path;
 };

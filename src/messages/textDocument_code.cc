@@ -7,9 +7,8 @@
 #include "query.hh"
 
 #include <llvm/Support/FormatVariadic.h>
-
-#include <rapidjson/document.h>
-#include <rapidjson/writer.h>
+#include <llvm/Support/JSON.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <unordered_set>
 
@@ -63,11 +62,12 @@ REFLECT_STRUCT(Command, title, command, arguments);
 REFLECT_STRUCT(CodeLens, range, command);
 
 template <typename T> std::string toString(T &v) {
-  rapidjson::StringBuffer output;
-  rapidjson::Writer<rapidjson::StringBuffer> writer(output);
+  std::string output;
+  llvm::raw_string_ostream os(output);
+  llvm::json::OStream writer(os);
   JsonWriter json_writer(&writer);
   reflect(json_writer, v);
-  return output.GetString();
+  return output;
 }
 
 struct CommonCodeLensParams {
@@ -150,9 +150,10 @@ void MessageHandler::workspace_executeCommand(JsonReader &reader, ReplyOnce &rep
   if (param.arguments.empty()) {
     return;
   }
-  rapidjson::Document reader1;
-  reader1.Parse(param.arguments[0].c_str());
-  JsonReader json_reader{&reader1};
+  auto reader1 = llvm::json::parse(param.arguments[0]);
+  if (!reader1)
+    return;
+  JsonReader json_reader{&reader1.get()};
   if (param.command == ccls_xref) {
     Cmd_xref cmd;
     reflect(json_reader, cmd);

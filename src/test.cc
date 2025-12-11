@@ -13,11 +13,9 @@
 
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Config/llvm-config.h>
-
-#include <rapidjson/document.h>
-#include <rapidjson/prettywriter.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/writer.h>
+#include <llvm/Support/FormatVariadic.h>
+#include <llvm/Support/JSON.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <fstream>
 #include <stdio.h>
@@ -34,15 +32,11 @@ using namespace llvm;
 extern bool gTestOutputMode;
 
 namespace ccls {
-std::string toString(const rapidjson::Document &document) {
-  rapidjson::StringBuffer buffer;
-  rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-  writer.SetFormatOptions(rapidjson::PrettyFormatOptions::kFormatSingleLineArray);
-  writer.SetIndent(' ', 2);
-
-  buffer.Clear();
-  document.Accept(writer);
-  return buffer.GetString();
+std::string toString(const llvm::json::Value &document) {
+  std::string buffer;
+  llvm::raw_string_ostream os(buffer);
+  os << llvm::formatv("{0:2}", document);
+  return buffer;
 }
 
 struct TextReplacer {
@@ -171,8 +165,7 @@ void updateTestExpectation(const std::string &filename, const std::string &expec
   writeToFile(filename, str);
 }
 
-void diffDocuments(std::string path, std::string path_section, rapidjson::Document &expected,
-                   rapidjson::Document &actual) {
+void diffDocuments(std::string path, std::string path_section, llvm::json::Value &expected, llvm::json::Value &actual) {
   std::string joined_actual_output = toString(actual);
   std::string joined_expected_output = toString(expected);
   printf("[FAILED] %s (section %s)\n", path.c_str(), path_section.c_str());
@@ -307,12 +300,16 @@ bool runIndexTests(const std::string &filter_path, bool enable_update) {
       }
       actual_output = text_replacer.apply(actual_output);
 
-      // Compare output via rapidjson::Document to ignore any formatting
+      // Compare output via llvm::json::Value to ignore any formatting
       // differences.
-      rapidjson::Document actual;
-      actual.Parse(actual_output.c_str());
-      rapidjson::Document expected;
-      expected.Parse(expected_output.c_str());
+      auto actual_exp = llvm::json::parse(actual_output);
+      auto expected_exp = llvm::json::parse(expected_output);
+      if (!actual_exp || !expected_exp) {
+        fprintf(stderr, "Failed to parse JSON\n");
+        continue;
+      }
+      llvm::json::Value actual = std::move(*actual_exp);
+      llvm::json::Value expected = std::move(*expected_exp);
 
       if (actual == expected) {
         // std::cout << "[PASSED] " << path << std::endl;
