@@ -179,6 +179,7 @@ install(TARGETS ccls RUNTIME DESTINATION bin)
 target_sources(ccls PRIVATE third_party/siphash.cc)
 
 target_sources(ccls PRIVATE
+  src/cache.cc
   src/clang_tu.cc
   src/config.cc
   src/filesystem.cc

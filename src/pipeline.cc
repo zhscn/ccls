@@ -3,6 +3,7 @@
 
 #include "pipeline.hh"
 
+#include "cache.hh"
 #include "config.hh"
 #include "log.hh"
 #include "lsp.hh"
@@ -22,7 +23,6 @@
 #include <chrono>
 #include <inttypes.h>
 #include <mutex>
-#include <shared_mutex>
 #include <thread>
 #ifndef _WIN32
 #include <unistd.h>
@@ -100,13 +100,6 @@ ThreadedQueue<IndexRequest> *index_request;
 ThreadedQueue<IndexUpdate> *on_indexed;
 ThreadedQueue<std::string> *for_stdout;
 
-struct InMemoryIndexFile {
-  std::string content;
-  IndexFile index;
-};
-std::shared_mutex g_index_mutex;
-std::unordered_map<std::string, InMemoryIndexFile> g_index;
-
 bool cacheInvalid(VFS *vfs, IndexFile *prev, const std::string &path, const std::vector<const char *> &args,
                   const std::optional<std::string> &from) {
   {
@@ -133,60 +126,6 @@ bool cacheInvalid(VFS *vfs, IndexFile *prev, const std::string &path, const std:
              << "; new: " << (changed < size ? args[changed] : "");
   return changed >= 0;
 };
-
-std::string appendSerializationFormat(const std::string &base) {
-  switch (g_config->cache.format) {
-  case SerializeFormat::Binary:
-    return base + ".blob";
-  case SerializeFormat::Json:
-    return base + ".json";
-  }
-}
-
-std::string getCachePath(std::string src) {
-  if (g_config->cache.hierarchicalPath) {
-    std::string ret = src[0] == '/' ? src.substr(1) : src;
-#ifdef _WIN32
-    std::replace(ret.begin(), ret.end(), ':', '@');
-#endif
-    return g_config->cache.directory + ret;
-  }
-  for (auto &[root, _] : g_config->workspaceFolders)
-    if (StringRef(src).startswith(root)) {
-      auto len = root.size();
-      return g_config->cache.directory + escapeFileName(root.substr(0, len - 1)) + '/' +
-             escapeFileName(src.substr(len));
-    }
-  return g_config->cache.directory + '@' +
-         escapeFileName(g_config->fallbackFolder.substr(0, g_config->fallbackFolder.size() - 1)) + '/' +
-         escapeFileName(src);
-}
-
-std::unique_ptr<IndexFile> rawCacheLoad(const std::string &path) {
-  if (g_config->cache.retainInMemory) {
-    std::shared_lock lock(g_index_mutex);
-    auto it = g_index.find(path);
-    if (it != g_index.end())
-      return std::make_unique<IndexFile>(it->second.index);
-    if (g_config->cache.directory.empty())
-      return nullptr;
-  }
-
-  std::string cache_path = getCachePath(path);
-  std::optional<std::string> file_content = readContent(cache_path);
-  std::optional<std::string> serialized_indexed_content = readContent(appendSerializationFormat(cache_path));
-  if (!file_content || !serialized_indexed_content)
-    return nullptr;
-
-  return ccls::deserialize(g_config->cache.format, path, *serialized_indexed_content, *file_content,
-                           IndexFile::kMajorVersion);
-}
-
-std::mutex &getFileMutex(const std::string &path) {
-  const int n_MUTEXES = 256;
-  static std::mutex mutexes[n_MUTEXES];
-  return mutexes[std::hash<std::string>()(path) % n_MUTEXES];
-}
 
 bool indexer_Parse(SemaManager * /*completion*/, WorkingFiles *wfiles, Project *project, VFS *vfs,
                    const GroupMatch &matcher) {
@@ -255,8 +194,8 @@ bool indexer_Parse(SemaManager * /*completion*/, WorkingFiles *wfiles, Project *
 
   if (reparse < 2)
     do {
-      std::unique_lock lock(getFileMutex(path_to_index));
-      prev = rawCacheLoad(path_to_index);
+      std::unique_lock lock(indexCache().mutex(path_to_index));
+      prev = indexCache().load(path_to_index);
       if (!prev || prev->no_linkage < no_linkage ||
           cacheInvalid(vfs, prev.get(), path_to_index, entry.args, std::nullopt))
         break;
@@ -298,8 +237,8 @@ bool indexer_Parse(SemaManager * /*completion*/, WorkingFiles *wfiles, Project *
         std::string path = dep.first.val().str();
         if (!vfs->stamp(path, dep.second, 1))
           continue;
-        std::lock_guard lock1(getFileMutex(path));
-        prev = rawCacheLoad(path);
+        std::lock_guard lock1(indexCache().mutex(path));
+        prev = indexCache().load(path);
         if (!prev)
           continue;
         {
@@ -378,29 +317,13 @@ bool indexer_Parse(SemaManager * /*completion*/, WorkingFiles *wfiles, Project *
     if (!deleted)
       LOG_IF_S(INFO, loud) << "store index for " << path << " (delta: " << !!prev << ")";
     {
-      std::lock_guard lock(getFileMutex(path));
-      int loaded = vfs->loaded(path), retain = g_config->cache.retainInMemory;
+      std::lock_guard lock(indexCache().mutex(path));
+      int loaded = vfs->loaded(path);
       if (loaded)
-        prev = rawCacheLoad(path);
+        prev = indexCache().load(path);
       else
         prev.reset();
-      if (retain > 0 && retain <= loaded + 1) {
-        std::lock_guard lock(g_index_mutex);
-        auto it = g_index.insert_or_assign(path, InMemoryIndexFile{curr->file_contents, *curr});
-        std::string().swap(it.first->second.index.file_contents);
-      }
-      if (g_config->cache.directory.size()) {
-        std::string cache_path = getCachePath(path);
-        if (deleted) {
-          (void)sys::fs::remove(cache_path);
-          (void)sys::fs::remove(appendSerializationFormat(cache_path));
-        } else {
-          if (g_config->cache.hierarchicalPath)
-            sys::fs::create_directories(sys::path::parent_path(cache_path, sys::path::Style::posix), true);
-          writeToFile(cache_path, curr->file_contents);
-          writeToFile(appendSerializationFormat(cache_path), serialize(g_config->cache.format, *curr));
-        }
-      }
+      indexCache().store(*curr, loaded, deleted);
       on_indexed->pushBack(IndexUpdate::createDelta(prev.get(), curr.get()), request.mode != IndexMode::Background);
       {
         std::lock_guard lock1(vfs->mutex);
@@ -807,23 +730,9 @@ void index(const std::string &path, const std::vector<const char *> &args, Index
   index_request->pushBack({path, args, mode, must_exist, std::move(id)}, mode != IndexMode::Background);
 }
 
-void removeCache(const std::string &path) {
-  if (g_config->cache.directory.size()) {
-    std::lock_guard lock(g_index_mutex);
-    g_index.erase(path);
-  }
-}
+void removeCache(const std::string &path) { indexCache().removeMemory(path); }
 
-std::optional<std::string> loadIndexedContent(const std::string &path) {
-  if (g_config->cache.directory.empty()) {
-    std::shared_lock lock(g_index_mutex);
-    auto it = g_index.find(path);
-    if (it == g_index.end())
-      return {};
-    return it->second.content;
-  }
-  return readContent(getCachePath(path));
-}
+std::optional<std::string> loadIndexedContent(const std::string &path) { return indexCache().loadIndexedContent(path); }
 
 void notifyOrRequest(const char *method, bool request, const std::function<void(JsonWriter &)> &fn) {
   std::string output;
