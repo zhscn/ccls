@@ -1,6 +1,7 @@
 // Copyright 2017-2018 ccls Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include "cache.hh"
 #include "log.hh"
 #include "message_handler.hh"
 #include "pipeline.hh"
@@ -340,6 +341,9 @@ void do_initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) 
     reflect(json_writer, *g_config);
     LOG_S(INFO) << "initializationOptions: " << output;
 
+    if (g_config->cache.directory.size()) {
+      g_config->cache.directory = resolveCacheDirectory(project_path, g_config->cache.directory);
+    }
     if (g_config->cache.directory.size()) {
       SmallString<256> path(g_config->cache.directory);
 #if LLVM_VERSION_MAJOR >= 22

@@ -195,7 +195,7 @@ bool indexer_Parse(SemaManager * /*completion*/, WorkingFiles *wfiles, Project *
   if (reparse < 2)
     do {
       std::unique_lock lock(indexCache().mutex(path_to_index));
-      prev = indexCache().load(path_to_index);
+      prev = indexCache().load(path_to_index, entry.args);
       if (!prev || prev->no_linkage < no_linkage ||
           cacheInvalid(vfs, prev.get(), path_to_index, entry.args, std::nullopt))
         break;
@@ -238,7 +238,7 @@ bool indexer_Parse(SemaManager * /*completion*/, WorkingFiles *wfiles, Project *
         if (!vfs->stamp(path, dep.second, 1))
           continue;
         std::lock_guard lock1(indexCache().mutex(path));
-        prev = indexCache().load(path);
+        prev = indexCache().load(path, entry.args);
         if (!prev)
           continue;
         {
@@ -320,7 +320,7 @@ bool indexer_Parse(SemaManager * /*completion*/, WorkingFiles *wfiles, Project *
       std::lock_guard lock(indexCache().mutex(path));
       int loaded = vfs->loaded(path);
       if (loaded)
-        prev = indexCache().load(path);
+        prev = indexCache().load(path, curr->args);
       else
         prev.reset();
       indexCache().store(*curr, loaded, deleted);

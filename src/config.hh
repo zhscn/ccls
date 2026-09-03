@@ -32,12 +32,13 @@ struct Config {
   std::string compilationDatabaseDirectory;
 
   struct Cache {
-    // Cache directory for indexed files, either absolute or relative to the
-    // project root.
+    // Cache directory for indexed files. "auto" uses a repository-wide
+    // directory under the user's cache home. Other relative paths are resolved
+    // against the project root.
     //
     // If empty, retainInMemory will be set to 1 and cache will be stored in
     // memory.
-    std::string directory = ".cache/ccls";
+    std::string directory = "auto";
 
     // Cache serialization format.
     //

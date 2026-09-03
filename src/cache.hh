@@ -7,9 +7,14 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ccls {
 struct IndexFile;
+
+// Resolves the configured cache directory. "auto" selects a repository-wide
+// directory under the user's cache home; relative paths remain project-local.
+std::string resolveCacheDirectory(const std::string &project_root, const std::string &configured);
 
 // Owns retained in-memory indexes and the disk cache's immutable,
 // content-addressed objects and mutable references. The indexing pipeline
@@ -25,7 +30,7 @@ public:
   // Serializes operations for one logical source path inside this process.
   std::mutex &mutex(const std::string &path);
 
-  std::unique_ptr<IndexFile> load(const std::string &path);
+  std::unique_ptr<IndexFile> load(const std::string &path, const std::vector<const char *> &args);
   void store(IndexFile &file, int previous_loads, bool deleted);
 
   // Drops the retained in-memory index while preserving its on-disk copy.
